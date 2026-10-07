@@ -1,4 +1,4 @@
-# ใบงานปฏิบัติสัปดาห์ที่ 8: Local Database & Persistence ด้วย Drift
+<img width="940" height="752" alt="image" src="https://github.com/user-attachments/assets/7ed13582-0060-4692-a688-2857e7131d2a" /># ใบงานปฏิบัติสัปดาห์ที่ 8: Local Database & Persistence ด้วย Drift
 
 **วิชา** การพัฒนาซอฟต์แวร์สำหรับอุปกรณ์เคลื่อนที่ | **เครื่องมือ** Flutter, Drift, sqlite3_flutter_libs, build_runner, Google AI Studio
 
@@ -55,8 +55,45 @@
 
 บันทึกโค้ดที่ Gemini ตอบกลับมาที่ด้านล่าง
 
-```text
-บันทึกผลลัพธ์ที่นี่
+```textimport 'package:drift/drift.dart';
+
+// -------------------------------------------------------------
+// 1. ตารางเก็บรายการสินค้าที่ถูกใจ (FavoriteProducts)
+// -------------------------------------------------------------
+class FavoriteProducts extends Table {
+  // รหัสสินค้าจากระบบหลัก (ใช้เป็น Primary Key)
+  IntColumn get productId => integer()();
+
+  // แคชข้อมูลพื้นฐานเพื่อแสดงผลแบบ Offline / Instant UI
+  TextColumn get title => text()();
+  RealColumn get price => real()();
+  TextColumn get imageUrl => text()();
+
+  // เวลาที่กดถูกใจ (ค่าเริ่มต้นเป็นเวลาปัจจุบัน)
+  DateTimeColumn get likedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {productId};
+}
+
+// -------------------------------------------------------------
+// 2. ตารางเก็บร่างประกาศขายสินค้าจาก AI (ListingDrafts)
+// -------------------------------------------------------------
+class ListingDrafts extends Table {
+  // Primary Key แบบ Auto Increment สำหรับร่างประกาศในเครื่อง
+  IntColumn get id => integer().autoIncrement()();
+
+  // ข้อมูลที่ AI สร้างให้ (กำหนดให้ nullable เผื่อ AI ประมวลผลได้ไม่ครบ หรือผู้ใช้ลบออกเพื่อพิมพ์ใหม่)
+  TextColumn get title => text().nullable()();
+  TextColumn get category => text().nullable()();
+  TextColumn get description => text().nullable()();
+
+  // Path ของไฟล์รูปภาพในเครื่อง (เช่น Cache directory หรือ App documents)
+  TextColumn get imagePath => text()();
+
+  // เวลาแก้ไขล่าสุด เพื่อนำมาเรียงลำดับร่างที่ทำค้างไว้
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
 ```
 
 
@@ -72,8 +109,25 @@
 > ✅ **Checkpoint 1.1** บันทึกคำตอบจากคำถามด้านบนทั้ง 4 ข้อ พร้อมแนบภาพหน้าจอผลลัพธ์จาก Gemini
 
 ```text
-บันทึกผลลัพธ์ที่นี่
+จากการนำ Schema ที่ได้จาก Gemini มาตรวจสอบเทียบกับหลักการในบทเรียนหัวข้อ 8.3 สรุปผลได้ดังนี้
+
+1. การกำหนด Primary Key
+ตาราง ListingDrafts ทาง Gemini กำหนด id เป็น integer().autoIncrement() ถูกต้องตามบทเรียน แต่ในตาราง Favorites ตัว Gemini ไปใช้ productId เป็น Primary Key ตรงๆ ซึ่งไม่ตรงกับแนวทางของบทเรียนที่แนะนำให้ทำ Surrogate Key โดยใช้ id เป็น Auto-increment Integer เพื่อให้เป็นมาตรฐานเดียวกันทุกตาราง
+
+2. ชนิดข้อมูลของราคาสินค้า
+Gemini เลือกใช้ RealColumn (real()) ถูกต้องตรงตามบทเรียน เพราะเทียบเท่ากับ double ในภาษา Dart ซึ่งเหมาะกับการเก็บตัวเลขทศนิยมอย่างราคาสินค้า
+
+3. การเก็บสำเนาข้อมูลกับหลักการ Offline-first
+Gemini เสนอให้เก็บสำเนาทั้ง title, price และ imageUrl ไว้ในตาราง Favorites ครบถ้วน ซึ่งสอดคล้องกับหลักการ Offline-first ในหัวข้อ 8.6 เพราะถ้าเราเก็บแค่ itemId แล้วต้องคอยยิง API ใหม่ทุกครั้ง เวลาที่ผู้ใช้เปิดแอปตอนไม่มีอินเทอร์เน็ต หน้าแสดงรายการโปรดจะไม่สามารถดึงข้อมูลมาโชว์ได้เลย
+
+4. การป้องกันข้อมูลซ้ำ (unique)
+Gemini ไม่ได้ใช้ .unique() แต่ไปใช้การเซ็ต primaryKey บน productId แทน ซึ่งถ้าปรับตามโครงสร้างบทเรียนที่มี id เป็น Primary Key อยู่แล้ว เราจำเป็นต้องเติม .unique() เข้าไปที่ itemId เอง เพื่อป้องกันไม่ให้ผู้ใช้กดหัวใจสินค้าชิ้นเดิมแล้วข้อมูลถูกบันทึกซ้ำซ้อนลงในตาราง
+
+
 ```
+<img width="961" height="796" alt="image" src="https://github.com/user-attachments/assets/bdf6b880-6afb-4dc0-a3a6-88fe7378d14f" />
+
+<img width="940" height="752" alt="image" src="https://github.com/user-attachments/assets/766bee83-616f-4251-bc48-0f2a5ae1f2fb" />
 
 ---
 
